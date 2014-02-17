@@ -5,8 +5,18 @@
 function pause(){
    read -p "$*"
 }
-
 echo "OpenConext VM credentials script"
+
+credentials=($engineblock_db_user $engineblock_db_pass $serviceregistry_db_user $serviceregistry_db_pass $manage_db_user $manage_db_pass $teams_db_user $teams_db_pass $api_db_user $api_db_pass $engineblock_janusapi_user $engineblock_janusapi_pass $api_janusapi_user $api_janusapi_pass $local_janusadmin_pass $janus_secretsalt)
+
+for cred in ${credentials[*]};
+do
+if [[ $cred == "/" ]];
+then echo "Check cred.conf some credentials are not set! They are now set as"/" "
+exit 1
+fi
+done
+
 echo "Using credentials assigned to the variables in file cred.conf"
 echo "Do you want to overwrite config files so credentials can be set with this script? [Y,n]"
 read input
@@ -80,8 +90,9 @@ echo "Using current MySQL root password: $current_root_db_pass"
 # Fix some database security issues
 echo "Dropping database TEST"
 mysql -uroot -p$current_root_db_pass -e "DROP DATABASE test"
+
 # Delete all users other than root
-echo "Cleanup root users and root access"
+echo "Cleanup MySQL root users and root access"
 mysql -uroot -p$current_root_db_pass -e "delete from mysql.user where User <> 'root'"
 # Delete other root users than specified
 mysql -uroot -p$current_root_db_pass -e "delete from mysql.user where User='root' and Host NOT IN ('localhost','127.0.0.1','localhost.localdomain')"
@@ -134,6 +145,3 @@ echo "Depending on your hardware, restarting all Java apps may take a while...."
 #sed -i "s/\[LDAP_PASS\]/$ldap_pass/g" /opt/tomcat/conf/classpath_properties/coin-api.properties
 #sed -i "s/\[LDAP_PASS\]/$ldap_pass/g" /etc/openldap/slapd.conf
 #echo "LDAP password set to: $ldap_pass"
-
-
-
