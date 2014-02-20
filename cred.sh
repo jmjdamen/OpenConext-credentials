@@ -18,10 +18,17 @@ fi
 done
 
 echo "Using credentials assigned to the variables in file cred.conf"
-echo "Do you want to overwrite config files so credentials can be set with this script? [Y,n]"
+echo "Do you want to STOP ALL RUNNING SERVICES and overwrite config files so credentials can be set with this script? [Y,n]"
 read input
 if [[ $input == "Y" || $input == "y" ]]; then
-        echo "Copying..."
+	echo -e "\nStopping services..."
+	# Do NOT stop MySQL here as we need a running deamon to add passwords!!
+	/etc/init.d/shibd stop
+	/etc/init.d/httpd stop
+	/etc/init.d/tomcat6 stop
+	/etc/init.d/slapd stop
+
+        echo -e "\nCopying..."
         cp ./modified/engineblock.ini /etc/surfconext/
         cp ./modified/manage.ini /etc/surfconext/
         cp ./modified/serviceregistry.module_janus.php /etc/surfconext/
@@ -29,15 +36,16 @@ if [[ $input == "Y" || $input == "y" ]]; then
         cp ./modified/coin-teams.properties /opt/tomcat/conf/classpath_properties/
         cp ./modified/coin-api.properties /opt/tomcat/conf/classpath_properties/
 	cp ./modified/grouper.hibernate.properties /opt/tomcat/conf/classpath_properties/
-        #cp ./modified/slapd.conf /etc/openldap/
+        cp ./modified/slapd.conf /etc/openldap/
 
 else
         echo "Not copying files..."
 fi
 
-pause "Are you sure you want to continue and change passwords with credentials from cred.conf? If so press any key, otherwise CTRL+C"
+echo -e "\n"
+pause "Are you sure you want to continue and change passwords with credentials from cred.conf? If so press Enter, otherwise CTRL+C"
 
-echo "Setting MySQL users and passwords with values from conf file to all related files"
+echo -e "\nSetting MySQL users and passwords with values from conf file to all related files"
 # Apply credentials to file engineblock.ini
 sed -i "s/\[ENGINEBLOCK_DB_USER\]/$engineblock_db_user/g" /etc/surfconext/engineblock.ini
 sed -i "s/\[ENGINEBLOCK_DB_PASS\]/$engineblock_db_pass/g" /etc/surfconext/engineblock.ini
@@ -82,10 +90,10 @@ sed -i "s/\[LOCAL_JANUSADMIN_PASS\]/$local_janusadmin_pass/g" /etc/surfconext/se
 # This is a secret salt used by simpleSAMLphp (JANUS) when it needs to generate a secure hash of a value.
 sed -i "s/\[JANUS_SECRETSALT\]/$janus_secretsalt/g" /etc/surfconext/serviceregistry.config.php
 
-echo "Please provide the current root password for the MySQL database (by default this is set to 'c0n3xt')"
+echo -e "\nPlease provide the current root password for the MySQL database (by default this is set to 'c0n3xt')"
 read current_root_db_pass
 
-echo "Using current MySQL root password: $current_root_db_pass"
+echo -e "\nUsing current MySQL root password: $current_root_db_pass"
 
 # Fix some database security issues
 echo "Dropping database TEST"
@@ -131,17 +139,23 @@ mysql -uroot -p$current_root_db_pass -e "FLUSH PRIVILEGES"
 mysql -uroot -p$current_root_db_pass -e "UPDATE mysql.user SET Password=PASSWORD('$root_db_pass') WHERE User='root';FLUSH PRIVILEGES;"
 echo "MySQL Root password set to: $root_db_pass"
 
-# restart Mysql, Tomcat, Apache
-echo "Restarting Mysql, Tomcat and Apache"
+echo "Create a new LDAP passwd for slapd.conf based on cred.conf" 
+slapd_pass=`slappasswd -n -s $ldap_pass`
+echo $slapd_pass
+sed -i "s/\[SLAPD_PASS\]/$slapd_pass/g" /etc/openldap/slapd.conf
+
+echo "Setting LDAP password with value from root_db_pass in all related files"
+sed -i "s/\[LDAP_PASS\]/$ldap_pass/g" /etc/surfconext/engineblock.ini
+sed -i "s/\[LDAP_PASS\]/$ldap_pass/g" /etc/surfconext/manage.ini
+sed -i "s/\[LDAP_PASS\]/$ldap_pass/g" /opt/tomcat/conf/classpath_properties/coin-api.properties
+echo "LDAP password set to: $ldap_pass"
+
+# restart LDAP, Mysql, Tomcat, Apache
+echo "Restarting LDAP,  Mysql, Tomcat, Shibboleth and Apache"
+/etc/init.d/slapd restart
 /etc/init.d/mysqld restart
 /etc/init.d/tomcat6 restart
 echo "Depending on your hardware, restarting all Java apps may take a while...."
+/etc/init.d/shibd restart
 /etc/init.d/httpd restart
 
-
-#echo "Setting LDAP password with value from root_db_pass in all related files"
-#sed -i "s/\[LDAP_PASS\]/$ldap_pass/g" /etc/surfconext/engineblock.ini
-#sed -i "s/\[LDAP_PASS\]/$ldap_pass/g" /etc/surfconext/manage.ini
-#sed -i "s/\[LDAP_PASS\]/$ldap_pass/g" /opt/tomcat/conf/classpath_properties/coin-api.properties
-#sed -i "s/\[LDAP_PASS\]/$ldap_pass/g" /etc/openldap/slapd.conf
-#echo "LDAP password set to: $ldap_pass"
